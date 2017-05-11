@@ -62,57 +62,95 @@ def Initialize (Width, Height, argv):				# We call this right after our OpenGL w
 		# solidFaces = BuildSolidStructure(defaultVertices, defaultSurfaces);
 		# objectsToDraw.append(solidFaces);
 		# objectsColorArray.append((1,0,0)); # red
-	ReadPLY(argv);
 
-	return True
+	# GetSolidFromFile(argv);
 
-def ReadPLY(argv):
-	global solidFaces, objectsToDraw, objectsColorArray;
-	# ler o arquivo e chamar BuildSolidStructure, objectsToDraw.append, objectsColorArray.append
-	if len(argv) < 2:
-		return False;
 
-	with open(argv[1]) as f:
-		nVertices = 0;
-		nFaces = 0;
-		end_header = False;
-		vertexIndex = 0;
-		faceIndex = 0;
-		vertices = [];
-		faces = [];
 
-		for line in f:
-			l = line.strip();
-			words = l.split(" ");
-
-			if not end_header:
-				if len(words) >= 3 and words[0] == "element" and words[1] == "vertex":
-					nVertices = int(words[2]);
-
-				elif len(words) >= 3 and words[0] == "element" and words[1] == "face":
-					nFaces = int(words[2]);
-
-				if len(words) >= 1 and words[0] == "end_header":
-					end_header = True;
-					continue;
-
-			if end_header:
-				
-				if vertexIndex < nVertices:
-					if (len(words) >= 3):
-						vertices.append(Point(float(words[0]),float(words[1]),float(words[2])));
-					vertexIndex += 1;
-
-				elif faceIndex < nFaces:
-					faces.append( [int(w) for w in words] );
-					faceIndex += 1;
-
+	vertices, faces = GetSolidFromFile(argv);
 	solidFaces = BuildSolidStructure(vertices, faces);
 	objectsToDraw.append(solidFaces);
 	objectsColorArray.append((1,0,0)); # red
 
+	return True
+
+def GetSolidFromFile(argv):
+	global solidFaces, objectsToDraw, objectsColorArray;
+	# ler o arquivo e chamar BuildSolidStructure, objectsToDraw.append, objectsColorArray.append
+	if len(argv) < 2:
+		return None;
+
+	# with open(argv[1]) as f:
+	f = open(argv[1]);
+	lines = f.readlines();
+
+	line = lines[3].split(" ");
+	nVertices = int(line[2]);
+	# print "nVertices", nVertices
+
+	line = lines[7].split(" ");
+	nFaces = int(line[2]);
+	# print "nFaces", nFaces
+
+	vertexIndex = 0;
+	vertices = [];
+	while vertexIndex < nVertices:
+		v = lines[10 + vertexIndex].split(" ");
+		vertices.append(Point(float(v[0]), float(v[1]), float(v[2])));
+		vertexIndex += 1;
+	# print "vertices", vertices
+
+	faceIndex = 0;
+	faces = [];
+	while faceIndex < nFaces:
+		face = lines[10 + vertexIndex + faceIndex].split(" ");
+		# print face
+		faces.append([int(fac) for fac in face[1:] if str.isdigit(fac)]);
+		faceIndex += 1;
+	# print "faces", faces
+
 	f.close();
-	return True;
+	return vertices, faces;
+
+	# nVertices = 0;
+	# nFaces = 0;
+	# vertexIndex = 0;
+	# faceIndex = 0;
+	# vertices = [];
+	# faces = [];
+	# end_header = False;
+	# for line in lines:
+	# 	l = line.strip();
+	# 	words = l.split(" ");
+
+	# 	if not end_header:
+	# 		if len(words) >= 3 and words[0] == "element" and words[1] == "vertex":
+	# 			nVertices = int(words[2]);
+
+	# 		elif len(words) >= 3 and words[0] == "element" and words[1] == "face":
+	# 			nFaces = int(words[2]);
+
+	# 		if len(words) >= 1 and words[0] == "end_header":
+	# 			end_header = True;
+	# 			continue;
+
+	# 	if end_header:
+			
+	# 		if vertexIndex < nVertices:
+	# 			if (len(words) >= 3):
+	# 				vertices.append(Point(float(words[0]),float(words[1]),float(words[2])));
+	# 			vertexIndex += 1;
+
+	# 		elif faceIndex < nFaces:
+	# 			faces.append( [int(w) for w in words] );
+	# 			faceIndex += 1;
+
+	# solidFaces = BuildSolidStructure(vertices, faces);
+	# objectsToDraw.append(solidFaces);
+	# objectsColorArray.append((1,0,0)); # red
+
+	# f.close();
+	# return True;
 
 # retorna o array de polígonos que forma o cubo, com base nas variáveis globais acima: vertices e surfaces
 def BuildSolidStructure(vertices, surfaces):
