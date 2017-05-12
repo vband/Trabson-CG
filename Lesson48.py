@@ -43,7 +43,8 @@ color_dict = {
 	(1,0,0): "red",
 	(1,0,1): "pink",
 	(1,1,0): "yellow",
-	(1,1,1): "white"
+	(1,1,1): "white",
+	(0.502, 0.502, 0.502): "gray"
 }
 
 # A general OpenGL initialization function.  Sets all of the initial parameters. 
@@ -212,12 +213,16 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 		x, y = ScreenToOGLCoords(cursor_x, cursor_y);
 		pickedFace = PickSurface(x, y, solidFaces);
 
-		# if pickedFace != None:
+		if pickedFace != None:
 		# 	# print "degree: ", graph.vertex_degree(pickedFace);
 		# 	print "neighbours:"
 		# 	for n in graph.vertex_neighbours(pickedFace):
 		# 		print color_dict[tuple(n.color)]
 		# 	print ""
+			# for visited in dfs_v2(graph, pickedFace):
+			# 	print color_dict[tuple(visited.color)]
+			# print ""
+			dfs_v3(graph, pickedFace);
 
 
 	return
@@ -249,6 +254,40 @@ def Torus(MinorRadius, MajorRadius):
 			glNormal3f (sin(PI2*(i+1%20+wrapFrac)/20.0)*cosphi, sinphi, cos(PI2*(i+1%20+wrapFrac)/20.0)*cosphi);
 			glVertex3f (sin(PI2*(i+1%20+wrapFrac)/20.0)*r, MinorRadius*sinphi, cos(PI2*(i+1%20+wrapFrac)/20.0)*r);
 	glEnd();														# // Done Torus
+	return
+
+def DFS(graph, start, visited=None):
+        if visited is None:
+            visited = [];
+        visited.append(start);
+        for next in set(graph.vertex_neighbours(start)) - set(visited):
+        	Visit(next);
+        	DFS(graph, next, visited);
+        return visited;
+
+def dfs_v2(graph, start, visited=None):
+	print "desceu"
+	if visited is None:
+		visited = set()
+	visited.add(start)
+	for next in set(graph.vertex_neighbours(start)) - visited:
+		Visit(next);
+		dfs_v2(graph, next, visited)
+		print "subiu"
+	return visited
+
+def dfs_v3(graph, start):
+	visited, stack = set(), [start]
+	while stack:
+		vertex = stack.pop()
+		if vertex not in visited:
+			visited.add(vertex)
+			Visit(vertex);
+			stack.extend(set(graph.vertex_neighbours(vertex)) - visited)
+	return visited
+
+def Visit(node):
+	print "visitou ", color_dict[tuple(node.color)];
 	return
 
 def ResetColors(polygons):
