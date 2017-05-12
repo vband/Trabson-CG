@@ -7,8 +7,8 @@ import copy
 from math import cos, sin
 
 from ArcBall import * 				# ArcBallT and this tutorials set of points/vectors/matrix types
-
 from geometry import *
+from graph2 import *
 
 PI2 = 2.0*3.1415926535			# 2 * PI (not squared!) 		// PI Squared
 
@@ -28,19 +28,27 @@ g_ArcBall = ArcBallT (640, 480)
 g_isDragging = False
 g_quadratic = None
 
-defaultVertices = (Point(1, -1, -1), Point(1, 1, -1), Point(-1, 1, -1), Point(-1, -1, -1), Point(1, -1, 1), Point(1, 1, 1), Point(-1, -1, 1), Point(-1, 1, 1));
-defalutEdges = ((0,1), (0,3), (0,4), (2,1), (2,3), (2,7), (6,3), (6,4), (6,7), (5,1), (5,4), (5,7));
-defaultSurfaces = ((0,1,2,3), (3,2,7,6), (6,7,5,4), (4,5,1,0), (1,5,7,2), (4,0,3,6));
+solidFaces = [];
+objectsToDraw = [];
 
-solidFaces = []
-objectsToDraw = []
+graph = Graph();
 
 #          blue    green     cyan     red      pink     yellow   white
 colors = ([0,0,1], [0,1,0], [0,1,1], [1,0,0], [1,0,1], [1,1,0], [1,1,1])
 
+color_dict = {
+	(0,0,1): "blue",
+	(0,1,0): "green",
+	(0,1,1): "cyan",
+	(1,0,0): "red",
+	(1,0,1): "pink",
+	(1,1,0): "yellow",
+	(1,1,1): "white"
+}
+
 # A general OpenGL initialization function.  Sets all of the initial parameters. 
 def Initialize (Width, Height, argv):				# We call this right after our OpenGL window is created.
-	global g_quadratic, solidFaces, objectsToDraw;
+	global g_quadratic, solidFaces, objectsToDraw, graph;
 
 	glClearColor(0.0, 0.0, 0.0, 1.0)					# This Will Clear The Background Color To Black
 	glClearDepth(1.0)									# Enables Clearing Of The Depth Buffer
@@ -64,7 +72,60 @@ def Initialize (Width, Height, argv):				# We call this right after our OpenGL w
 	solidFaces = BuildSolidStructure(vertices, faces);
 	objectsToDraw.append(solidFaces);
 
+	graph = BuildGraph(solidFaces);
+
+	# for fa in solidFaces:
+	# 	print color_dict[tuple(fa.color)], ":"
+	# 	print "tem aresta em comum com:"
+	# 	for face in solidFaces:
+	# 		if fa != face and DoPolygonsHaveAnEdgeInCommon(fa, face):
+	# 			print color_dict[tuple(face.color)]
+	# 	print ""
+
+	# print graph.is_connected()
+
 	return True
+
+def BuildGraph(polygons):
+	graph = Graph();
+
+	for polygon in polygons:
+		graph.add_vertex(polygon);
+
+	for polygon1 in polygons:
+		# print color_dict[tuple(polygon1.color)], ":"
+		# print "tem aresta em comum com:"
+		for polygon2 in polygons:
+			if polygon1.points != polygon2.points and DoPolygonsHaveAnEdgeInCommon(polygon1, polygon2):
+				# print color_dict[tuple(polygon2.color)]
+				graph.add_edge({polygon1, polygon2});
+		# print ""
+
+
+
+
+
+	# for polygon in polygons:
+	# 	graph.add_vertex(polygon);
+	# 	# print color_dict[tuple(polygon.color)]
+	
+	# for i in range(len(polygons)):
+	# 	for j in range(len(polygons)):
+	# 		if j != i:
+	# 			if DoPolygonsHaveAnEdgeInCommon(polygons[i], polygons[j]):
+	# 				# if {polygons[i], polygons[j]} not in graph.edges():
+	# 				graph.add_edge({polygons[i], polygons[j]});
+	return graph;
+
+def DoPolygonsHaveAnEdgeInCommon(poly1, poly2):
+	edges1 = GeneratePolygonEdges(poly1);
+	edges2 = GeneratePolygonEdges(poly2);
+
+	for line1 in edges1:
+		for line2 in edges2:
+			if (line1.p1 == line2.p1 and line1.p2 == line2.p2) or (line1.p1 == line2.p2 and line1.p2 == line2.p1):
+				return True;
+	return False;
 
 def GetSolidFromFile(argv):
 	global solidFaces, objectsToDraw;
@@ -99,12 +160,14 @@ def GetSolidFromFile(argv):
 
 # retorna o array de polígonos que forma o cubo, com base nas variáveis globais acima: vertices e surfaces
 def BuildSolidStructure(vertices, surfaces):
+	i = 0;
 	polygons = [];
 	for listOfVertexIndexes in surfaces:
 		arrayOfPoints = [];
 		for vertexIndex in listOfVertexIndexes:
 			arrayOfPoints.append(vertices[vertexIndex]);
-		polygons.append(Polygon(arrayOfPoints));
+		polygons.append(Polygon(arrayOfPoints, colors[i % len(colors)]));
+		i += 1;
 
 	return polygons;
 
@@ -148,6 +211,14 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 		g_ArcBall.click (mouse_pt);								# // Update Start Vector And Prepare For Dragging
 		x, y = ScreenToOGLCoords(cursor_x, cursor_y);
 		pickedFace = PickSurface(x, y, solidFaces);
+
+		# if pickedFace != None:
+		# 	# print "degree: ", graph.vertex_degree(pickedFace);
+		# 	print "neighbours:"
+		# 	for n in graph.vertex_neighbours(pickedFace):
+		# 		print color_dict[tuple(n.color)]
+		# 	print ""
+
 
 	return
 
@@ -253,6 +324,13 @@ def ScreenToOGLCoords(cursor_x, cursor_y):
 # 	glVertex3f(mouseX, mouseY, -2);
 # 	glEnd();
 # 	return
+
+def GeneratePolygonEdges(polygon):
+	edges = [];
+	for i in range(len(polygon.points) - 1):
+		edges.append(Line(polygon.points[i], polygon.points[i+1]));
+	edges.append(Line(polygon.points[-1], polygon.points[0]));
+	return edges;
 
 def DrawSolid(solidFaces):
 	i = 0;
