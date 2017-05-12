@@ -34,11 +34,13 @@ defaultSurfaces = ((0,1,2,3), (3,2,7,6), (6,7,5,4), (4,5,1,0), (1,5,7,2), (4,0,3
 
 solidFaces = []
 objectsToDraw = []
-objectsColorArray = []
+
+#          blue    green     cyan     red      pink     yellow   white
+colors = ([0,0,1], [0,1,0], [0,1,1], [1,0,0], [1,0,1], [1,1,0], [1,1,1])
 
 # A general OpenGL initialization function.  Sets all of the initial parameters. 
 def Initialize (Width, Height, argv):				# We call this right after our OpenGL window is created.
-	global g_quadratic, solidFaces, objectsToDraw, objectsColorArray;
+	global g_quadratic, solidFaces, objectsToDraw;
 
 	glClearColor(0.0, 0.0, 0.0, 1.0)					# This Will Clear The Background Color To Black
 	glClearDepth(1.0)									# Enables Clearing Of The Depth Buffer
@@ -58,39 +60,25 @@ def Initialize (Width, Height, argv):				# We call this right after our OpenGL w
 
 	# glEnable (GL_COLOR_MATERIAL)
 
-	# if not ReadPLY(argv):
-		# solidFaces = BuildSolidStructure(defaultVertices, defaultSurfaces);
-		# objectsToDraw.append(solidFaces);
-		# objectsColorArray.append((1,0,0)); # red
-
-	# GetSolidFromFile(argv);
-
-
-
 	vertices, faces = GetSolidFromFile(argv);
 	solidFaces = BuildSolidStructure(vertices, faces);
 	objectsToDraw.append(solidFaces);
-	objectsColorArray.append((1,0,0)); # red
 
 	return True
 
 def GetSolidFromFile(argv):
-	global solidFaces, objectsToDraw, objectsColorArray;
-	# ler o arquivo e chamar BuildSolidStructure, objectsToDraw.append, objectsColorArray.append
+	global solidFaces, objectsToDraw;
 	if len(argv) < 2:
 		return None;
 
-	# with open(argv[1]) as f:
 	f = open(argv[1]);
 	lines = f.readlines();
 
 	line = lines[3].split(" ");
 	nVertices = int(line[2]);
-	# print "nVertices", nVertices
 
 	line = lines[7].split(" ");
 	nFaces = int(line[2]);
-	# print "nFaces", nFaces
 
 	vertexIndex = 0;
 	vertices = [];
@@ -98,59 +86,16 @@ def GetSolidFromFile(argv):
 		v = lines[10 + vertexIndex].split(" ");
 		vertices.append(Point(float(v[0]), float(v[1]), float(v[2])));
 		vertexIndex += 1;
-	# print "vertices", vertices
 
 	faceIndex = 0;
 	faces = [];
 	while faceIndex < nFaces:
 		face = lines[10 + vertexIndex + faceIndex].split(" ");
-		# print face
 		faces.append([int(fac) for fac in face[1:] if str.isdigit(fac)]);
 		faceIndex += 1;
-	# print "faces", faces
 
 	f.close();
 	return vertices, faces;
-
-	# nVertices = 0;
-	# nFaces = 0;
-	# vertexIndex = 0;
-	# faceIndex = 0;
-	# vertices = [];
-	# faces = [];
-	# end_header = False;
-	# for line in lines:
-	# 	l = line.strip();
-	# 	words = l.split(" ");
-
-	# 	if not end_header:
-	# 		if len(words) >= 3 and words[0] == "element" and words[1] == "vertex":
-	# 			nVertices = int(words[2]);
-
-	# 		elif len(words) >= 3 and words[0] == "element" and words[1] == "face":
-	# 			nFaces = int(words[2]);
-
-	# 		if len(words) >= 1 and words[0] == "end_header":
-	# 			end_header = True;
-	# 			continue;
-
-	# 	if end_header:
-			
-	# 		if vertexIndex < nVertices:
-	# 			if (len(words) >= 3):
-	# 				vertices.append(Point(float(words[0]),float(words[1]),float(words[2])));
-	# 			vertexIndex += 1;
-
-	# 		elif faceIndex < nFaces:
-	# 			faces.append( [int(w) for w in words] );
-	# 			faceIndex += 1;
-
-	# solidFaces = BuildSolidStructure(vertices, faces);
-	# objectsToDraw.append(solidFaces);
-	# objectsColorArray.append((1,0,0)); # red
-
-	# f.close();
-	# return True;
 
 # retorna o array de polígonos que forma o cubo, com base nas variáveis globais acima: vertices e surfaces
 def BuildSolidStructure(vertices, surfaces):
@@ -202,7 +147,7 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 		mouse_pt = Point2fT (cursor_x, cursor_y)
 		g_ArcBall.click (mouse_pt);								# // Update Start Vector And Prepare For Dragging
 		x, y = ScreenToOGLCoords(cursor_x, cursor_y);
-		PickSurface(x, y, solidFaces)
+		pickedFace = PickSurface(x, y, solidFaces);
 
 	return
 
@@ -235,9 +180,16 @@ def Torus(MinorRadius, MajorRadius):
 	glEnd();														# // Done Torus
 	return
 
+def ResetColors(polygons):
+	i = 0;
+	for poly in polygons:
+		poly.color = colors[i % len(colors)];
+		i += 1;
+	return polygons;
+
 # Recebe o ponto onde o mouse clicou, e um array de polígonos, e retorna o polígono que foi clicado
 def PickSurface(mouseX, mouseY, polygons):
-	global objectsToDraw, objectsColorArray;
+	global objectsToDraw;
 
 	# passar os pontos mouseX e mouseY para a rotação certa
 	p1 = [mouseX, mouseY, 2];
@@ -250,12 +202,10 @@ def PickSurface(mouseX, mouseY, polygons):
 
 	interceptedPolygons = WhichPolygonsDoesLineCross(line, polygons);
 	pickedPolygon = WhichPolygonIsCloserToScreen(interceptedPolygons, line);
+
 	if pickedPolygon != None:
-		if len(objectsToDraw) > 1:
-			del objectsToDraw[-1];
-			del objectsColorArray[-1];
-		objectsToDraw.append([pickedPolygon]);
-		objectsColorArray.append((0,0,1));
+		objectsToDraw[0] = ResetColors(objectsToDraw[0]);
+		objectsToDraw[0][objectsToDraw[0].index(pickedPolygon)].color = [0.502, 0.502, 0.502] # gray
 	return pickedPolygon;
 
 # Recebe uma linha e um array de polígonos, e retorna quais polígonos são interceptados pela linha
@@ -304,10 +254,15 @@ def ScreenToOGLCoords(cursor_x, cursor_y):
 # 	glEnd();
 # 	return
 
-def DrawSolid(solidFaces, color):
+def DrawSolid(solidFaces):
+	i = 0;
 	for polygon in solidFaces:
 		glBegin(GL_POLYGON);
-		glColor3fv(color);
+		if polygon.color == None:
+			glColor3fv(colors[i % len(colors)]);
+			i += 1;
+		else:
+			glColor3fv(polygon.color);
 		for point in polygon.points:
 			glVertex3f(point[0], point[1], point[2]);
 		glEnd();
@@ -338,7 +293,7 @@ def Draw ():
 	# Torus(0.30,1.00);
 	n = len(objectsToDraw);
 	for i in range(n):
-		DrawSolid(objectsToDraw[i], objectsColorArray[i]);
+		DrawSolid(objectsToDraw[i]);
 
 	
 
