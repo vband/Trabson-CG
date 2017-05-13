@@ -129,7 +129,7 @@ class ArcBallT:
 			NewRot[W] = Vector3fDot(self.m_StVec, self.m_EnVec);
 		else:		#                            //if its zero
 			# //The begin and end vectors coincide, so return a quaternion of zero matrix (no rotation)
-			NewRot.X = NewRot.Y = NewRot.Z = NewRot.W = 0.0;
+			NewRot[X] = NewRot[Y] = NewRot[Z] = NewRot[W] = 0.0;
 			
 		return NewRot
 

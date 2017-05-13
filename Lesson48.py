@@ -99,10 +99,11 @@ def BuildGraph(polygons):
 
 	for polygon1 in polygons:
 		# print color_dict[tuple(polygon1.color)], ":"
-		# print "tem aresta em comum com:"
+		# print "filhos:"
 		for polygon2 in polygons:
 			if polygon1.points != polygon2.points and DoPolygonsHaveAnEdgeInCommon(polygon1, polygon2):
-				# print color_dict[tuple(polygon2.color)]
+				# if {polygon1, polygon2} not in graph.edges():
+				# print "\t", color_dict[tuple(polygon2.color)]
 				graph.add_edge({polygon1, polygon2});
 				# graph.add_edge({polygon2, polygon1});
 		# print ""
@@ -230,7 +231,7 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 		pickedFace = PickSurface(x, y, solidFaces);
 
 		if pickedFace != None:
-			visited = dfs_v3(graph, pickedFace);
+			visited = bfs_keeping_track_of_parents(graph, pickedFace);
 			# for v in visited:
 			# 	print GetColor(v.color)
 
@@ -239,19 +240,62 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 
 	return
 
-def dfs_v3(graph, start):
+def dfs_iterative(graph, start):
+	print "start: ", GetColor(start.color)
 	visited, stack = set(), [start]
 	previous = start;
 	while stack:
 		vertex = stack.pop();
 		if vertex not in visited:
+			if not DoPolygonsHaveAnEdgeInCommon(previous, vertex):
+				previous = start;
 			visited.add(vertex);
+			print "visitou o ", GetColor(vertex.color), ", pai: ", GetColor(previous.color)
 			Visit(vertex, previous);
 			stack.extend(set(graph.vertex_neighbours(vertex)) - visited);
 			# stack.extend(set(graph.vertex_children(vertex)) - visited);
 			# stack.extend(set(graph.vertex_parents(vertex)) - visited);
 			previous = vertex;
 	return visited
+
+def dfs_recursive(graph, start, parent=None, visited=None):
+    if visited is None:
+        visited = set();
+    visited.add(start);
+    if parent == None:
+    	parent = start;
+    Visit(start, parent);
+    print "visitou o ", GetColor(start.color), ", pai: ", GetColor(parent.color)
+    for next in set(graph.vertex_neighbours(start)) - visited:
+        dfs_recursive(graph, next, start, visited);
+    return visited;
+
+def bfs(graph, start):
+    visited, queue = set(), [start];
+    while queue:
+        vertex = queue.pop(0);
+        if vertex not in visited:
+            visited.add(vertex);
+            Visit(vertex, parent);
+            queue.extend(set(graph.vertex_neighbours(vertex)) - visited);
+    return visited;
+
+def bfs_keeping_track_of_parents(graph, start):
+	parent = {};
+	queue = [start];
+	visited = set();
+	parent[start] = start;
+	while queue:
+		node = queue.pop(0);
+		if node not in visited:
+			visited.add(node);
+
+			for adjacent in graph.vertex_neighbours(node): # <<<<< record its parent
+				parent[adjacent] = node
+
+			Visit(node, parent[node]);
+			# print "visitou o ", GetColor(node.color), ", pai: ", GetColor(parent[node].color);
+			queue.extend(set(graph.vertex_neighbours(node)) - visited);
 
 def Visit(thisPoly, prevPoly):
 	# print "thisPoly: ", GetColor(thisPoly.color);
