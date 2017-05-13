@@ -4,11 +4,13 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 import sys
 import copy
-from math import cos, sin
+import math
+import numpy
 
 from ArcBall import * 				# ArcBallT and this tutorials set of points/vectors/matrix types
 from geometry import *
 from graph2 import *
+# from matrix import *
 
 PI2 = 2.0*3.1415926535			# 2 * PI (not squared!) 		// PI Squared
 
@@ -32,6 +34,8 @@ solidFaces = [];
 objectsToDraw = [];
 
 graph = Graph();
+
+angularSpeed = 0.1;
 
 #          blue    green     cyan     red      pink     yellow   white
 colors = ([0,0,1], [0,1,0], [0,1,1], [1,0,0], [1,0,1], [1,1,0], [1,1,1])
@@ -100,6 +104,7 @@ def BuildGraph(polygons):
 			if polygon1.points != polygon2.points and DoPolygonsHaveAnEdgeInCommon(polygon1, polygon2):
 				# print color_dict[tuple(polygon2.color)]
 				graph.add_edge({polygon1, polygon2});
+				# graph.add_edge({polygon2, polygon1});
 		# print ""
 
 
@@ -127,6 +132,17 @@ def DoPolygonsHaveAnEdgeInCommon(poly1, poly2):
 			if (line1.p1 == line2.p1 and line1.p2 == line2.p2) or (line1.p1 == line2.p2 and line1.p2 == line2.p1):
 				return True;
 	return False;
+
+def GetEdgesInCommon(poly1, poly2):
+	edges1 = GeneratePolygonEdges(poly1);
+	edges2 = GeneratePolygonEdges(poly2);
+	edgesInCommon = [];
+
+	for line1 in edges1:
+		for line2 in edges2:
+			if (line1.p1 == line2.p1 and line1.p2 == line2.p2) or (line1.p1 == line2.p2 and line1.p2 == line2.p1):
+				edgesInCommon.append(line1);
+	return edgesInCommon;
 
 def GetSolidFromFile(argv):
 	global solidFaces, objectsToDraw;
@@ -214,80 +230,63 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 		pickedFace = PickSurface(x, y, solidFaces);
 
 		if pickedFace != None:
-		# 	# print "degree: ", graph.vertex_degree(pickedFace);
-		# 	print "neighbours:"
-		# 	for n in graph.vertex_neighbours(pickedFace):
-		# 		print color_dict[tuple(n.color)]
-		# 	print ""
-			# for visited in dfs_v2(graph, pickedFace):
-			# 	print color_dict[tuple(visited.color)]
-			# print ""
-			dfs_v3(graph, pickedFace);
+			visited = dfs_v3(graph, pickedFace);
+			# for v in visited:
+			# 	print GetColor(v.color)
 
+			# for nei in graph.vertex_neighbours(pickedFace):
+			# 	Visit(nei, pickedFace);
 
 	return
-
-
-
-def Torus(MinorRadius, MajorRadius):		
-	# // Draw A Torus With Normals
-	glBegin( GL_TRIANGLE_STRIP );									# // Start A Triangle Strip
-	for i in xrange (20): 											# // Stacks
-		for j in xrange (-1, 20): 										# // Slices
-			# NOTE, python's definition of modulus for negative numbers returns
-			# results different than C's
-			#       (a / d)*d  +  a % d = a
-			if (j < 0):
-				wrapFrac = (-j%20)/20.0
-				wrapFrac *= -1.0
-			else:
-				wrapFrac = (j%20)/20.0;
-			phi = PI2*wrapFrac;
-			sinphi = sin(phi);
-			cosphi = cos(phi);
-
-			r = MajorRadius + MinorRadius*cosphi;
-
-			glNormal3f (sin(PI2*(i%20+wrapFrac)/20.0)*cosphi, sinphi, cos(PI2*(i%20+wrapFrac)/20.0)*cosphi);
-			glVertex3f (sin(PI2*(i%20+wrapFrac)/20.0)*r, MinorRadius*sinphi, cos(PI2*(i%20+wrapFrac)/20.0)*r);
-
-			glNormal3f (sin(PI2*(i+1%20+wrapFrac)/20.0)*cosphi, sinphi, cos(PI2*(i+1%20+wrapFrac)/20.0)*cosphi);
-			glVertex3f (sin(PI2*(i+1%20+wrapFrac)/20.0)*r, MinorRadius*sinphi, cos(PI2*(i+1%20+wrapFrac)/20.0)*r);
-	glEnd();														# // Done Torus
-	return
-
-def DFS(graph, start, visited=None):
-        if visited is None:
-            visited = [];
-        visited.append(start);
-        for next in set(graph.vertex_neighbours(start)) - set(visited):
-        	Visit(next);
-        	DFS(graph, next, visited);
-        return visited;
-
-def dfs_v2(graph, start, visited=None):
-	print "desceu"
-	if visited is None:
-		visited = set()
-	visited.add(start)
-	for next in set(graph.vertex_neighbours(start)) - visited:
-		Visit(next);
-		dfs_v2(graph, next, visited)
-		print "subiu"
-	return visited
 
 def dfs_v3(graph, start):
 	visited, stack = set(), [start]
+	previous = start;
 	while stack:
-		vertex = stack.pop()
+		vertex = stack.pop();
 		if vertex not in visited:
-			visited.add(vertex)
-			Visit(vertex);
-			stack.extend(set(graph.vertex_neighbours(vertex)) - visited)
+			visited.add(vertex);
+			Visit(vertex, previous);
+			stack.extend(set(graph.vertex_neighbours(vertex)) - visited);
+			# stack.extend(set(graph.vertex_children(vertex)) - visited);
+			# stack.extend(set(graph.vertex_parents(vertex)) - visited);
+			previous = vertex;
 	return visited
 
-def Visit(node):
-	print "visitou ", color_dict[tuple(node.color)];
+def Visit(thisPoly, prevPoly):
+	# print "thisPoly: ", GetColor(thisPoly.color);
+	# print "prevPoly: ", GetColor(prevPoly.color);
+	if thisPoly != prevPoly:
+		n1 = [thisPoly.normal[0], thisPoly.normal[1], thisPoly.normal[2]];
+		n2 = [prevPoly.normal[0], prevPoly.normal[1], prevPoly.normal[2]];
+		angle = Angle(n1, n2);
+		angle = numpy.rad2deg(angle);
+		# print "angle: ", angle
+		edges1 = GeneratePolygonEdges(thisPoly);
+		# print "edges do this: ", edges1
+		edges2 = GeneratePolygonEdges(prevPoly);
+		# print "edges do prev: ", edges2
+		commonEdges = GetEdgesInCommon(thisPoly, prevPoly);
+		if commonEdges == []:
+			return
+		# print "commonEdges: ", commonEdges
+		fixedPoint = commonEdges[0].midpoint();
+		# fixedPoint = [fixedPoint[0], fixedPoint[1], fixedPoint[2]];
+		# print "fixedPoint: ", fixedPoint
+		# axis = Vector3fCross(n1, n2);
+		axis = numpy.cross(n1, n2);
+		# print "axis: ", axis
+		# fixedPoint = numpy.array(fixedPoint);
+		# axis = numpy.array(axis);
+		thisPoly.transAngle = 1;
+		thisPoly.transPoint = fixedPoint;
+		thisPoly.transAxis = axis;
+		thisPoly.transMaxAngle = angle;
+		thisPoly.ancestralTransform = prevPoly.transform;
+		# thisPoly.transform = dot(thisPoly.transform, translateAndRotate(1, fixedPoint, axis));
+		trans = translateAndRotate(thisPoly.transMaxAngle, thisPoly.transPoint, thisPoly.transAxis, thisPoly.ancestralTransform);
+		thisPoly.transform = trans;
+
 	return
 
 def ResetColors(polygons):
@@ -364,6 +363,21 @@ def ScreenToOGLCoords(cursor_x, cursor_y):
 # 	glEnd();
 # 	return
 
+def translateAndRotate(ang, p, axis, transform):
+	# T = translate(p[0],p[1],p[2]) * \
+        # rotate(ang, axis[0], axis[1], axis[2]) * \
+        # translate(-p[0],-p[1],-p[2])
+
+	glPushMatrix();
+	glLoadIdentity();
+	glMultMatrixf(transform);
+	glTranslate(p[0],p[1],p[2]);
+	glRotate(ang, axis[0], axis[1], axis[2]);
+	glTranslate(-p[0],-p[1],-p[2]);
+	T = glGetDoublev ( GL_MODELVIEW_MATRIX );
+	glPopMatrix();
+	return T;
+
 def GeneratePolygonEdges(polygon):
 	edges = [];
 	for i in range(len(polygon.points) - 1):
@@ -372,8 +386,30 @@ def GeneratePolygonEdges(polygon):
 	return edges;
 
 def DrawSolid(solidFaces):
+	global angularSpeed
 	i = 0;
 	for polygon in solidFaces:
+
+		# Aplica a transformação
+		# if polygon.transform != None:
+			# print "vai aplicar a transform do", GetColor(polygon.color)
+			# t = polygon.transform;
+
+
+			# ANIMAÇÃO:
+		# if polygon.transMaxAngle != None:
+		# 	polygon.transform = translateAndRotate(polygon.transAngle, polygon.transPoint, polygon.transAxis, polygon.ancestralTransform);
+		# 	# polygon.transform = rotate(polygon.transAngle, polygon.transAxis[0], polygon.transAxis[1], polygon.transAxis[2]);
+		# 	polygon.transAngle += angularSpeed;
+		# 	if polygon.transAngle >= polygon.transMaxAngle and angularSpeed > 0:
+		# 		angularSpeed *= -1;
+		# 	elif polygon.transAngle <= 0 and angularSpeed < 0:
+		# 		angularSpeed *= -1;
+
+
+		# print solidFaces[0].transAngle, solidFaces[0].transMaxAngle
+		glMultMatrixf(polygon.transform);
+
 		glBegin(GL_POLYGON);
 		if polygon.color == None:
 			glColor3fv(colors[i % len(colors)]);
@@ -384,9 +420,15 @@ def DrawSolid(solidFaces):
 			glVertex3f(point[0], point[1], point[2]);
 		glEnd();
 
+		# Desfaz a transformação
+		# if polygon.transform != None:
+		glLoadIdentity();
+		glTranslatef(0.0,0.0,-6.0);
+		glMultMatrixf(g_Transform);
+
 	for polygon in solidFaces:
 		glBegin(GL_LINES);
-		glColor3f(0,0,0);
+		glColor3f(1,1,1);
 
 		for i in range(len(polygon.points) - 1):
 			glVertex3f(polygon.points[i][0], polygon.points[i][1], polygon.points[i][2]);
@@ -395,7 +437,6 @@ def DrawSolid(solidFaces):
 		glVertex3f(polygon.points[-1][0], polygon.points[-1][1], polygon.points[-1][2]);
 		glVertex3f(polygon.points[0][0], polygon.points[0][1], polygon.points[0][2]);
 		glEnd();
-
 
 	return
 
@@ -432,3 +473,15 @@ def Draw ():
 	glFlush ();														# // Flush The GL Rendering Pipeline
 	glutSwapBuffers()
 	return
+
+def GetColor(color):
+	return color_dict[tuple(color)];
+
+# def Dotproduct(v1, v2):
+# 	return sum((a*b) for a, b in zip(v1, v2))
+
+def Length(v):
+	return math.sqrt(Vector3fDot(v, v))
+
+def Angle(v1, v2):
+	return math.acos(Vector3fDot(v1, v2) / (Length(v1) * Length(v2)))

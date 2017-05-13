@@ -24,6 +24,13 @@ class Graph(object):
     def vertex_children(self, vertex):
         return self.__graph_dict[vertex];
 
+    def vertex_parents(self, vertex):
+        p = [];
+        for v in self.vertices():
+            if vertex in self.vertex_children(v) and vertex not in p:
+                p.append(v);
+        return p;
+
     def vertex_neighbours(self, initialVertex):
         n = [];
 

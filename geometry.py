@@ -355,7 +355,7 @@ class Line(object):
 class Polygon(object):
     """A class representing a polygon."""
 
-    def __init__(self, points, color = None):
+    def __init__(self, points, color = None, transform = numpy.matrix(numpy.identity(4)), transAngle=0, transPoint=None, transAxis=None, transMaxAngle=None, ancestralTransform=None):
         """Constructor. Throws an exception if less than three points are given."""
 
         if len(points) < 3:
@@ -369,6 +369,12 @@ class Polygon(object):
         self.normal = self.compNormal().normalize()
 
         self.color = color
+        self.transform = transform
+        self.transAngle = transAngle
+        self.transPoint = transPoint
+        self.transAxis = transAxis
+        self.transMaxAngle = transMaxAngle
+        self.ancestralTransform = ancestralTransform
 
     def __repr__(self):
         """String representation of this polygon.""" 
