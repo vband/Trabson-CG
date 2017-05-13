@@ -55,6 +55,10 @@ color_dict = {
 def Initialize (Width, Height, argv):				# We call this right after our OpenGL window is created.
 	global g_quadratic, solidFaces, objectsToDraw, graph;
 
+	if len(argv) < 2:
+		print "Entre com o nome do arquivo na linha de comando"
+		return False
+
 	glClearColor(0.0, 0.0, 0.0, 1.0)					# This Will Clear The Background Color To Black
 	glClearDepth(1.0)									# Enables Clearing Of The Depth Buffer
 	glDepthFunc(GL_LEQUAL)								# The Type Of Depth Test To Do
@@ -79,16 +83,6 @@ def Initialize (Width, Height, argv):				# We call this right after our OpenGL w
 
 	graph = BuildGraph(solidFaces);
 
-	# for fa in solidFaces:
-	# 	print color_dict[tuple(fa.color)], ":"
-	# 	print "tem aresta em comum com:"
-	# 	for face in solidFaces:
-	# 		if fa != face and DoPolygonsHaveAnEdgeInCommon(fa, face):
-	# 			print color_dict[tuple(face.color)]
-	# 	print ""
-
-	# print graph.is_connected()
-
 	return True
 
 def BuildGraph(polygons):
@@ -98,30 +92,9 @@ def BuildGraph(polygons):
 		graph.add_vertex(polygon);
 
 	for polygon1 in polygons:
-		# print color_dict[tuple(polygon1.color)], ":"
-		# print "filhos:"
 		for polygon2 in polygons:
 			if polygon1.points != polygon2.points and DoPolygonsHaveAnEdgeInCommon(polygon1, polygon2):
-				# if {polygon1, polygon2} not in graph.edges():
-				# print "\t", color_dict[tuple(polygon2.color)]
 				graph.add_edge({polygon1, polygon2});
-				# graph.add_edge({polygon2, polygon1});
-		# print ""
-
-
-
-
-
-	# for polygon in polygons:
-	# 	graph.add_vertex(polygon);
-	# 	# print color_dict[tuple(polygon.color)]
-	
-	# for i in range(len(polygons)):
-	# 	for j in range(len(polygons)):
-	# 		if j != i:
-	# 			if DoPolygonsHaveAnEdgeInCommon(polygons[i], polygons[j]):
-	# 				# if {polygons[i], polygons[j]} not in graph.edges():
-	# 				graph.add_edge({polygons[i], polygons[j]});
 	return graph;
 
 def DoPolygonsHaveAnEdgeInCommon(poly1, poly2):
@@ -241,7 +214,6 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 	return
 
 def dfs_iterative(graph, start):
-	print "start: ", GetColor(start.color)
 	visited, stack = set(), [start]
 	previous = start;
 	while stack:
@@ -250,11 +222,8 @@ def dfs_iterative(graph, start):
 			if not DoPolygonsHaveAnEdgeInCommon(previous, vertex):
 				previous = start;
 			visited.add(vertex);
-			print "visitou o ", GetColor(vertex.color), ", pai: ", GetColor(previous.color)
 			Visit(vertex, previous);
 			stack.extend(set(graph.vertex_neighbours(vertex)) - visited);
-			# stack.extend(set(graph.vertex_children(vertex)) - visited);
-			# stack.extend(set(graph.vertex_parents(vertex)) - visited);
 			previous = vertex;
 	return visited
 
@@ -265,7 +234,6 @@ def dfs_recursive(graph, start, parent=None, visited=None):
     if parent == None:
     	parent = start;
     Visit(start, parent);
-    print "visitou o ", GetColor(start.color), ", pai: ", GetColor(parent.color)
     for next in set(graph.vertex_neighbours(start)) - visited:
         dfs_recursive(graph, next, start, visited);
     return visited;
@@ -294,43 +262,28 @@ def bfs_keeping_track_of_parents(graph, start):
 				parent[adjacent] = node
 
 			Visit(node, parent[node]);
-			# print "visitou o ", GetColor(node.color), ", pai: ", GetColor(parent[node].color);
 			queue.extend(set(graph.vertex_neighbours(node)) - visited);
 
 def Visit(thisPoly, prevPoly):
-	# print "thisPoly: ", GetColor(thisPoly.color);
-	# print "prevPoly: ", GetColor(prevPoly.color);
 	if thisPoly != prevPoly:
 		n1 = [thisPoly.normal[0], thisPoly.normal[1], thisPoly.normal[2]];
 		n2 = [prevPoly.normal[0], prevPoly.normal[1], prevPoly.normal[2]];
 		angle = Angle(n1, n2);
 		angle = numpy.rad2deg(angle);
-		# print "angle: ", angle
 		edges1 = GeneratePolygonEdges(thisPoly);
-		# print "edges do this: ", edges1
 		edges2 = GeneratePolygonEdges(prevPoly);
-		# print "edges do prev: ", edges2
 		commonEdges = GetEdgesInCommon(thisPoly, prevPoly);
 		if commonEdges == []:
 			return
-		# print "commonEdges: ", commonEdges
 		fixedPoint = commonEdges[0].midpoint();
-		# fixedPoint = [fixedPoint[0], fixedPoint[1], fixedPoint[2]];
-		# print "fixedPoint: ", fixedPoint
-		# axis = Vector3fCross(n1, n2);
 		axis = numpy.cross(n1, n2);
-		# print "axis: ", axis
-		# fixedPoint = numpy.array(fixedPoint);
-		# axis = numpy.array(axis);
 		thisPoly.transAngle = 1;
 		thisPoly.transPoint = fixedPoint;
 		thisPoly.transAxis = axis;
 		thisPoly.transMaxAngle = angle;
-		thisPoly.ancestralTransform = prevPoly.transform;
-		# thisPoly.transform = dot(thisPoly.transform, translateAndRotate(1, fixedPoint, axis));
-		trans = translateAndRotate(thisPoly.transMaxAngle, thisPoly.transPoint, thisPoly.transAxis, thisPoly.ancestralTransform);
+		thisPoly.transParent = prevPoly;
+		trans = translateAndRotate(thisPoly.transAngle, thisPoly.transPoint, thisPoly.transAxis, thisPoly.transParent);
 		thisPoly.transform = trans;
-
 	return
 
 def ResetColors(polygons):
@@ -397,24 +350,10 @@ def ScreenToOGLCoords(cursor_x, cursor_y):
 
 	return posX, posY;
 
-# Desenha na tela uma linha entrando na tela, representando graficamente o clique do mouse
-# def DrawClickLine(mouseX, mouseY):
-# 	# mouseX, mouseY = ScreenToOGLCoords(mouseX, mouseY);
-# 	glBegin(GL_LINES);
-# 	glColor3f(0,0,1);
-# 	glVertex3f(mouseX, mouseY, 2);
-# 	glVertex3f(mouseX, mouseY, -2);
-# 	glEnd();
-# 	return
-
-def translateAndRotate(ang, p, axis, transform):
-	# T = translate(p[0],p[1],p[2]) * \
-        # rotate(ang, axis[0], axis[1], axis[2]) * \
-        # translate(-p[0],-p[1],-p[2])
-
+def translateAndRotate(ang, p, axis, parent):
 	glPushMatrix();
 	glLoadIdentity();
-	glMultMatrixf(transform);
+	glMultMatrixf(parent.transform);
 	glTranslate(p[0],p[1],p[2]);
 	glRotate(ang, axis[0], axis[1], axis[2]);
 	glTranslate(-p[0],-p[1],-p[2]);
@@ -434,24 +373,16 @@ def DrawSolid(solidFaces):
 	i = 0;
 	for polygon in solidFaces:
 
-		# Aplica a transformação
-		# if polygon.transform != None:
-			# print "vai aplicar a transform do", GetColor(polygon.color)
-			# t = polygon.transform;
-
-
 			# ANIMAÇÃO:
-		# if polygon.transMaxAngle != None:
-		# 	polygon.transform = translateAndRotate(polygon.transAngle, polygon.transPoint, polygon.transAxis, polygon.ancestralTransform);
-		# 	# polygon.transform = rotate(polygon.transAngle, polygon.transAxis[0], polygon.transAxis[1], polygon.transAxis[2]);
-		# 	polygon.transAngle += angularSpeed;
-		# 	if polygon.transAngle >= polygon.transMaxAngle and angularSpeed > 0:
-		# 		angularSpeed *= -1;
-		# 	elif polygon.transAngle <= 0 and angularSpeed < 0:
-		# 		angularSpeed *= -1;
+		if polygon.transMaxAngle != None:
+			polygon.transform = translateAndRotate(polygon.transAngle, polygon.transPoint, polygon.transAxis, polygon.transParent);
+			polygon.transAngle += angularSpeed;
+			if polygon.transAngle >= polygon.transMaxAngle and angularSpeed > 0:
+				angularSpeed *= -1;
+			elif polygon.transAngle <= 0 and angularSpeed < 0:
+				angularSpeed *= -1;
 
 
-		# print solidFaces[0].transAngle, solidFaces[0].transMaxAngle
 		glMultMatrixf(polygon.transform);
 
 		glBegin(GL_POLYGON);
@@ -464,8 +395,6 @@ def DrawSolid(solidFaces):
 			glVertex3f(point[0], point[1], point[2]);
 		glEnd();
 
-		# Desfaz a transformação
-		# if polygon.transform != None:
 		glLoadIdentity();
 		glTranslatef(0.0,0.0,-6.0);
 		glMultMatrixf(g_Transform);
@@ -491,28 +420,11 @@ def Draw ():
 
 	glPushMatrix();													# // NEW: Prepare Dynamic Transform
 	glMultMatrixf(g_Transform);										# // NEW: Apply Dynamic Transform
-	# glColor3f(0.75,0.75,1.0);
-	# Torus(0.30,1.00);
 	n = len(objectsToDraw);
 	for i in range(n):
 		DrawSolid(objectsToDraw[i]);
 
-	
-
 	glPopMatrix();													# // NEW: Unapply Dynamic Transform
-
-	# if hasClicked:
-	# 	DrawClickLine(lastMouseClickX, lastMouseClickY);
-	
-
-	# glLoadIdentity();												# // Reset The Current Modelview Matrix
-	# glTranslatef(1.5,0.0,-6.0);										# // Move Right 1.5 Units And Into The Screen 7.0
-
-	# glPushMatrix();													# // NEW: Prepare Dynamic Transform
-	# glMultMatrixf(g_Transform);										# // NEW: Apply Dynamic Transform
-	# glColor3f(1.0,0.75,0.75);
-	# gluSphere(g_quadratic,1.3,20,20);
-	# glPopMatrix();													# // NEW: Unapply Dynamic Transform
 
 	glFlush ();														# // Flush The GL Rendering Pipeline
 	glutSwapBuffers()
@@ -520,9 +432,6 @@ def Draw ():
 
 def GetColor(color):
 	return color_dict[tuple(color)];
-
-# def Dotproduct(v1, v2):
-# 	return sum((a*b) for a, b in zip(v1, v2))
 
 def Length(v):
 	return math.sqrt(Vector3fDot(v, v))
