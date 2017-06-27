@@ -40,6 +40,8 @@ graph = Graph();
 
 angularSpeed = 0.6;
 
+pickedFacePolygon = 0;
+
 #          blue    green     cyan     red      pink     yellow   white
 colors = ([0,0,1], [0,1,0], [0,1,1], [1,0,0], [1,0,1], [1,1,0], [1,1,1])
 
@@ -305,7 +307,7 @@ def ResetColors(polygons):
 
 # Recebe o ponto onde o mouse clicou, e um array de polígonos, e retorna o polígono que foi clicado
 def PickSurface(mouseX, mouseY, polygons):
-	global objectsToDraw;
+	global objectsToDraw, pickedFacePolygon;
 
 	# passar os pontos mouseX e mouseY para a rotação certa
 	p1 = [mouseX, mouseY, 2];
@@ -322,6 +324,7 @@ def PickSurface(mouseX, mouseY, polygons):
 	if pickedPolygon != None:
 		objectsToDraw[0] = ResetColors(objectsToDraw[0]);
 		objectsToDraw[0][objectsToDraw[0].index(pickedPolygon)].color = [0.502, 0.502, 0.502] # gray
+		pickedFacePolygon = pickedPolygon;
 	return pickedPolygon;
 
 # Recebe uma linha e um array de polígonos, e retorna quais polígonos são interceptados pela linha
@@ -362,10 +365,19 @@ def ScreenToOGLCoords(cursor_x, cursor_y):
 def translateAndRotate(ang, p, axis, parent):
 	glPushMatrix();
 	glLoadIdentity();
-	glMultMatrixf(parent.transform);
+	if parent != None:
+		glMultMatrixf(parent.transform);
 	glTranslate(p[0],p[1],p[2]);
 	glRotate(ang, axis[0], axis[1], axis[2]);
 	glTranslate(-p[0],-p[1],-p[2]);
+	T = glGetDoublev ( GL_MODELVIEW_MATRIX );
+	glPopMatrix();
+	return T;
+
+def rotate(ang, axis):
+	glPushMatrix();
+	glLoadIdentity();
+	glRotate(ang, axis[0], axis[1], axis[2]);
 	T = glGetDoublev ( GL_MODELVIEW_MATRIX );
 	glPopMatrix();
 	return T;
@@ -377,36 +389,61 @@ def GeneratePolygonEdges(polygon):
 	edges.append(Line(polygon.points[-1], polygon.points[0]));
 	return edges;
 
-# modelview x g_transform x translaterotate
+# Adiciona todos os pontos transformados numa bounding box
 def BuildBoundingBox():
 	global solidFaces;
-	# Adiciona todos os pontos transformados numa bounding box
 	box = Box();
+
+	normal = pickedFacePolygon.compNormal();
+	v1 = [normal[0], normal[1], normal[2]];
+	v2 = [0, 0, 1];
+	ang = Angle(v1, v2);
+	ang = numpy.rad2deg(ang);
+	if ang > 90:
+		ang = ang - 180
+	axis = numpy.cross(v1, v2);
+	rotMatrix = rotate(ang, axis);
+
 	for polygon in solidFaces:
 		for point in polygon.points:
 			auxPoint = [point.x, point.y, point.z, 1];
 			transformedPoint = 0;
 			if polygon.transParent != None:
-				# translaterotate = translateAndRotate(polygon.transMaxAngle, polygon.transPoint, polygon.transAxis, polygon.transParent);
-				# transform = Matrix3fMulMatrix3f(auxPoint, modelview);
 				auxPointR = Matrix3fMulMatrix3f(auxPoint, polygon.transform); # Aplica a transformação de cada polígono a cada um de seus pontos, para que eu possa trabalhar com o sólido aberto
+				
+				auxPointR = Matrix3fMulMatrix3f(auxPointR, rotMatrix);
+				
 				transformedPoint = Point(auxPointR[0], auxPointR[1], auxPointR[2]);
-				# print GetColor(solidFaces[polyIndex].color), auxPoint, " ~~> ", auxPointR
 			else:
-				transformedPoint = point;
-				# print GetColor(solidFaces[polyIndex].color), auxPoint, " ~~> ", auxPoint
+				auxPointR = Matrix3fMulMatrix3f(auxPoint, rotMatrix);
+				transformedPoint = Point(auxPointR[0], auxPointR[1], auxPointR[2]);
 			box.add(transformedPoint);
-		# print ""
 
 	return box
 
 def MakeTextureCoords(point, polygon, box, translaterotate):
 	transformedPoint = 0;
+
+	normal = pickedFacePolygon.compNormal();
+	v1 = [normal[0], normal[1], normal[2]];
+	v2 = [0, 0, 1];
+	ang = Angle(v1, v2);
+	ang = numpy.rad2deg(ang);
+	if ang > 90:
+		ang = ang - 180
+	axis = numpy.cross(v1, v2);
+	rotMatrix = rotate(ang, axis);
+
 	if polygon.transParent == None:
-		transformedPoint = point;
+		auxPoint = [point[0], point[1], point[2], 1];
+		transformedPoint = Matrix3fMulMatrix3f(auxPoint, rotMatrix);
+		transformedPoint = Point(transformedPoint[0], transformedPoint[1], transformedPoint[2]);
 	else:
 		auxPoint = [point[0], point[1], point[2], 1];
 		transformedPoint = Matrix3fMulMatrix3f(auxPoint, translaterotate);
+
+		transformedPoint = Matrix3fMulMatrix3f(transformedPoint, rotMatrix);
+		
 		transformedPoint = Point(transformedPoint[0], transformedPoint[1], transformedPoint[2]);
 	return box.normalize(transformedPoint);
 
@@ -445,7 +482,7 @@ def DrawSolid():
 							for point in polygon2.points:
 								pointArray.append([GetColor(polygon2.color), point]);
 								texArray.append(MakeTextureCoords(point, polygon2, boundingBox, translaterotate));
-								# print GetColor(polygon2.color), point, arrayIndex, " --> ", texArray[arrayIndex]
+								# print arrayIndex, GetColor(polygon2.color), "    \t", point, "\t --> \t", texArray[arrayIndex]
 								arrayIndex += 1;
 						return;
 
@@ -468,8 +505,8 @@ def DrawSolid():
 				glTexCoord2f(texArray[index][0], texArray[index][1]);
 
 				# if debugCount < 24:
-					# print GetColor(polygon.color), point, index, "-->", texArray[index]
-					# debugCount += 1
+				# 	print GetColor(polygon.color), point, index, "-->", texArray[index]
+				# 	debugCount += 1
 
 			glVertex3f(point[0], point[1], point[2]);
 		glEnd();
