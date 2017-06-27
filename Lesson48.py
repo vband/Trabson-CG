@@ -6,6 +6,7 @@ import sys
 import copy
 import math
 import numpy
+import PIL.Image
 
 from ArcBall import * 				# ArcBallT and this tutorials set of points/vectors/matrix types
 from geometry import *
@@ -30,12 +31,14 @@ g_ArcBall = ArcBallT (640, 480)
 g_isDragging = False
 g_quadratic = None
 
+boundingBox = None;
+
 solidFaces = [];
 objectsToDraw = [];
 
 graph = Graph();
 
-angularSpeed = 0.1;
+angularSpeed = 0.6;
 
 #          blue    green     cyan     red      pink     yellow   white
 colors = ([0,0,1], [0,1,0], [0,1,1], [1,0,0], [1,0,1], [1,1,0], [1,1,1])
@@ -51,9 +54,12 @@ color_dict = {
 	(0.502, 0.502, 0.502): "gray"
 }
 
+imageID = 0;
+hasTexture = False;
+
 # A general OpenGL initialization function.  Sets all of the initial parameters. 
 def Initialize (Width, Height, argv):				# We call this right after our OpenGL window is created.
-	global g_quadratic, solidFaces, objectsToDraw, graph;
+	global g_quadratic, solidFaces, objectsToDraw, graph, imageID;
 
 	if len(argv) < 2:
 		print "Entre com o nome do arquivo na linha de comando"
@@ -82,6 +88,8 @@ def Initialize (Width, Height, argv):				# We call this right after our OpenGL w
 	objectsToDraw.append(solidFaces);
 
 	graph = BuildGraph(solidFaces);
+
+	imageID = LoadImage();
 
 	return True
 
@@ -149,6 +157,46 @@ def GetSolidFromFile(argv):
 	f.close();
 	return vertices, faces;
 
+def LoadImage(imageName = "Imagens/Velazquez.jpg"):
+	"""Load an image file as a 2D texture using PIL"""
+
+	# PIL defines an "open" method which is Image specific!
+	im = PIL.Image.open(imageName)
+	try:
+		ix, iy, image = im.size[0], im.size[1], im.tobytes("raw", "RGBA", 0, -1)
+	except (SystemError, ValueError):
+		ix, iy, image = im.size[0], im.size[1], im.tobytes("raw", "RGBX", 0, -1)
+	except AttributeError:
+		ix, iy, image = im.size[0], im.size[1], im.tostring("raw", "RGBX", 0, -1)
+
+	# Generate a texture ID
+	ID = glGenTextures(1)
+
+	# Make our new texture ID the current 2D texture
+	glBindTexture(GL_TEXTURE_2D, ID)
+	glPixelStorei(GL_UNPACK_ALIGNMENT,1)
+
+	# Copy the texture data into the current texture ID
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ix, iy, 0, GL_RGBA, GL_UNSIGNED_BYTE, image)
+
+	# Note that only the ID is returned, no reference to the image object or the 
+	# string data is stored in user space. 
+	# The data is only present within the GL after this call exits.
+	return ID
+
+def SetUpTexture():
+	"""Render-time texture environment setup"""
+
+	# Configure the texture rendering parameters
+	glEnable(GL_TEXTURE_2D)
+
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
+	# Re-select our texture, could use other generated textures if we had generated them earlier...
+	glBindTexture(GL_TEXTURE_2D, imageID)
+
 # retorna o array de polígonos que forma o cubo, com base nas variáveis globais acima: vertices e surfaces
 def BuildSolidStructure(vertices, surfaces):
 	i = 0;
@@ -205,48 +253,8 @@ def Upon_Click (button, button_state, cursor_x, cursor_y):
 
 		if pickedFace != None:
 			visited = bfs_keeping_track_of_parents(graph, pickedFace);
-			# for v in visited:
-			# 	print GetColor(v.color)
-
-			# for nei in graph.vertex_neighbours(pickedFace):
-			# 	Visit(nei, pickedFace);
 
 	return
-
-def dfs_iterative(graph, start):
-	visited, stack = set(), [start]
-	previous = start;
-	while stack:
-		vertex = stack.pop();
-		if vertex not in visited:
-			if not DoPolygonsHaveAnEdgeInCommon(previous, vertex):
-				previous = start;
-			visited.add(vertex);
-			Visit(vertex, previous);
-			stack.extend(set(graph.vertex_neighbours(vertex)) - visited);
-			previous = vertex;
-	return visited
-
-def dfs_recursive(graph, start, parent=None, visited=None):
-    if visited is None:
-        visited = set();
-    visited.add(start);
-    if parent == None:
-    	parent = start;
-    Visit(start, parent);
-    for next in set(graph.vertex_neighbours(start)) - visited:
-        dfs_recursive(graph, next, start, visited);
-    return visited;
-
-def bfs(graph, start):
-    visited, queue = set(), [start];
-    while queue:
-        vertex = queue.pop(0);
-        if vertex not in visited:
-            visited.add(vertex);
-            Visit(vertex, parent);
-            queue.extend(set(graph.vertex_neighbours(vertex)) - visited);
-    return visited;
 
 def bfs_keeping_track_of_parents(graph, start):
 	parent = {};
@@ -284,6 +292,8 @@ def Visit(thisPoly, prevPoly):
 		thisPoly.transParent = prevPoly;
 		trans = translateAndRotate(thisPoly.transAngle, thisPoly.transPoint, thisPoly.transAxis, thisPoly.transParent);
 		thisPoly.transform = trans;
+	else:
+		thisPoly.transParent = None;
 	return
 
 def ResetColors(polygons):
@@ -337,7 +347,6 @@ def WhichPolygonIsCloserToScreen(polygons, clickLine):
 
 	return closerPoly;
 
-
 def ScreenToOGLCoords(cursor_x, cursor_y):
 	viewport = glGetDoublev(GL_VIEWPORT);
 
@@ -368,22 +377,84 @@ def GeneratePolygonEdges(polygon):
 	edges.append(Line(polygon.points[-1], polygon.points[0]));
 	return edges;
 
-def DrawSolid(solidFaces):
-	global angularSpeed
-	i = 0;
+# modelview x g_transform x translaterotate
+def BuildBoundingBox():
+	global solidFaces;
+	# Adiciona todos os pontos transformados numa bounding box
+	box = Box();
 	for polygon in solidFaces:
+		for point in polygon.points:
+			auxPoint = [point.x, point.y, point.z, 1];
+			transformedPoint = 0;
+			if polygon.transParent != None:
+				# translaterotate = translateAndRotate(polygon.transMaxAngle, polygon.transPoint, polygon.transAxis, polygon.transParent);
+				# transform = Matrix3fMulMatrix3f(auxPoint, modelview);
+				auxPointR = Matrix3fMulMatrix3f(auxPoint, polygon.transform); # Aplica a transformação de cada polígono a cada um de seus pontos, para que eu possa trabalhar com o sólido aberto
+				transformedPoint = Point(auxPointR[0], auxPointR[1], auxPointR[2]);
+				# print GetColor(solidFaces[polyIndex].color), auxPoint, " ~~> ", auxPointR
+			else:
+				transformedPoint = point;
+				# print GetColor(solidFaces[polyIndex].color), auxPoint, " ~~> ", auxPoint
+			box.add(transformedPoint);
+		# print ""
 
-			# ANIMAÇÃO:
-		if polygon.transMaxAngle != None:
-			polygon.transform = translateAndRotate(polygon.transAngle, polygon.transPoint, polygon.transAxis, polygon.transParent);
-			polygon.transAngle += angularSpeed;
-			if polygon.transAngle >= polygon.transMaxAngle and angularSpeed > 0:
-				angularSpeed *= -1;
-			elif polygon.transAngle <= 0 and angularSpeed < 0:
-				angularSpeed *= -1;
+	return box
+
+def MakeTextureCoords(point, polygon, box, translaterotate):
+	transformedPoint = 0;
+	if polygon.transParent == None:
+		transformedPoint = point;
+	else:
+		auxPoint = [point[0], point[1], point[2], 1];
+		transformedPoint = Matrix3fMulMatrix3f(auxPoint, translaterotate);
+		transformedPoint = Point(transformedPoint[0], transformedPoint[1], transformedPoint[2]);
+	return box.normalize(transformedPoint);
+
+debugCount = 0;
+pointArray = []
+texArray = []
+arrayIndex = 0;
+
+def DrawSolid():
+	global boundingBox, solidFaces, angularSpeed, hasTexture, debugCount, pointArray, texArray, arrayIndex
+	i = 0;
+	
+	for polygon in solidFaces:
+		
+		translaterotate = 0;
+		if hasTexture and polygon.transParent != None:
+			translaterotate = translateAndRotate(polygon.transMaxAngle, polygon.transPoint, polygon.transAxis, polygon.transParent);
+
+		# ANIMAÇÃO:
+		if angularSpeed != 0:
+			if polygon.transMaxAngle != None:
+				polygon.transform = translateAndRotate(polygon.transAngle, polygon.transPoint, polygon.transAxis, polygon.transParent);
+				polygon.transAngle += angularSpeed;
+				if polygon.transAngle >= polygon.transMaxAngle and angularSpeed > 0:
+					angularSpeed *= -1;
+					if not hasTexture:
+						hasTexture = True;
+						boundingBox = BuildBoundingBox();
+						# Pausa a animação
+						# angularSpeed = 0;
+
+						for polygon2 in solidFaces:
+							translaterotate = 0;
+							if polygon2.transParent != None:
+								translaterotate = translateAndRotate(polygon2.transMaxAngle, polygon2.transPoint, polygon2.transAxis, polygon2.transParent);
+							for point in polygon2.points:
+								pointArray.append([GetColor(polygon2.color), point]);
+								texArray.append(MakeTextureCoords(point, polygon2, boundingBox, translaterotate));
+								# print GetColor(polygon2.color), point, arrayIndex, " --> ", texArray[arrayIndex]
+								arrayIndex += 1;
+						return;
+
+				elif polygon.transAngle <= 0 and angularSpeed < 0:
+					angularSpeed *= -1;
 
 
 		glMultMatrixf(polygon.transform);
+
 
 		glBegin(GL_POLYGON);
 		if polygon.color == None:
@@ -392,6 +463,14 @@ def DrawSolid(solidFaces):
 		else:
 			glColor3fv(polygon.color);
 		for point in polygon.points:
+			if hasTexture:
+				index = pointArray.index([GetColor(polygon.color), point])
+				glTexCoord2f(texArray[index][0], texArray[index][1]);
+
+				# if debugCount < 24:
+					# print GetColor(polygon.color), point, index, "-->", texArray[index]
+					# debugCount += 1
+
 			glVertex3f(point[0], point[1], point[2]);
 		glEnd();
 
@@ -399,17 +478,17 @@ def DrawSolid(solidFaces):
 		glTranslatef(0.0,0.0,-6.0);
 		glMultMatrixf(g_Transform);
 
-	for polygon in solidFaces:
-		glBegin(GL_LINES);
-		glColor3f(1,1,1);
+	# for polygon in solidFaces:
+	# 	glBegin(GL_LINES);
+	# 	glColor3f(1,1,1);
 
-		for i in range(len(polygon.points) - 1):
-			glVertex3f(polygon.points[i][0], polygon.points[i][1], polygon.points[i][2]);
-			glVertex3f(polygon.points[i+1][0], polygon.points[i+1][1], polygon.points[i+1][2]);
+	# 	for i in range(len(polygon.points) - 1):
+	# 		glVertex3f(polygon.points[i][0], polygon.points[i][1], polygon.points[i][2]);
+	# 		glVertex3f(polygon.points[i+1][0], polygon.points[i+1][1], polygon.points[i+1][2]);
 
-		glVertex3f(polygon.points[-1][0], polygon.points[-1][1], polygon.points[-1][2]);
-		glVertex3f(polygon.points[0][0], polygon.points[0][1], polygon.points[0][2]);
-		glEnd();
+	# 	glVertex3f(polygon.points[-1][0], polygon.points[-1][1], polygon.points[-1][2]);
+	# 	glVertex3f(polygon.points[0][0], polygon.points[0][1], polygon.points[0][2]);
+	# 	glEnd();
 
 	return
 
@@ -420,15 +499,63 @@ def Draw ():
 
 	glPushMatrix();													# // NEW: Prepare Dynamic Transform
 	glMultMatrixf(g_Transform);										# // NEW: Apply Dynamic Transform
-	n = len(objectsToDraw);
-	for i in range(n):
-		DrawSolid(objectsToDraw[i]);
+
+	if hasTexture:
+		SetUpTexture();
+
+	# n = len(objectsToDraw);
+	# for i in range(n):
+	# 	DrawSolid(objectsToDraw[i]);
+	DrawSolid();
+
+	# drawCube(); # DEBUG
 
 	glPopMatrix();													# // NEW: Unapply Dynamic Transform
 
 	glFlush ();														# // Flush The GL Rendering Pipeline
 	glutSwapBuffers()
 	return
+
+# DEBUG
+def drawCube():
+		"""Draw a cube with texture coordinates"""
+
+		SetUpTexture()
+
+		glBegin(GL_QUADS)
+		glColor3f(1.0,0.0,0.0)
+		glTexCoord2f(0.0, 0.0); glVertex3f(-1.0, -1.0,  1.0);
+		glTexCoord2f(1.0, 0.0); glVertex3f( 1.0, -1.0,  1.0);
+		glTexCoord2f(1.0, 1.0); glVertex3f( 1.0,  1.0,  1.0);
+		glTexCoord2f(0.0, 1.0); glVertex3f(-1.0,  1.0,  1.0);
+		glColor3f(0.0,1.0,0.0)
+		glTexCoord2f(1.0, 0.0); glVertex3f(-1.0, -1.0, -1.0);
+		glTexCoord2f(1.0, 1.0); glVertex3f(-1.0,  1.0, -1.0);
+		glTexCoord2f(0.0, 1.0); glVertex3f( 1.0,  1.0, -1.0);
+		glTexCoord2f(0.0, 0.0); glVertex3f( 1.0, -1.0, -1.0);
+		glColor3f(0.0,0.0,1.0)
+		glTexCoord2f(0.0, 1.0); glVertex3f(-1.0,  1.0, -1.0);
+		glTexCoord2f(0.0, 0.0); glVertex3f(-1.0,  1.0,  1.0);
+		glTexCoord2f(1.0, 0.0); glVertex3f( 1.0,  1.0,  1.0);
+		glTexCoord2f(1.0, 1.0); glVertex3f( 1.0,  1.0, -1.0);
+		glColor3f(1.0,1.0,0.0)
+		glTexCoord2f(1.0, 1.0); glVertex3f(-1.0, -1.0, -1.0);
+		glTexCoord2f(0.0, 1.0); glVertex3f( 1.0, -1.0, -1.0);
+		glTexCoord2f(0.0, 0.0); glVertex3f( 1.0, -1.0,  1.0);
+		glTexCoord2f(1.0, 0.0); glVertex3f(-1.0, -1.0,  1.0);
+		glColor3f(0.0,1.0,1.0)
+		glTexCoord2f(1.0, 0.0); glVertex3f( 1.0, -1.0, -1.0);
+		glTexCoord2f(1.0, 1.0); glVertex3f( 1.0,  1.0, -1.0);
+		glTexCoord2f(0.0, 1.0); glVertex3f( 1.0,  1.0,  1.0);
+		glTexCoord2f(0.0, 0.0); glVertex3f( 1.0, -1.0,  1.0);
+		glColor3f(1.0,0.0,1.0)
+		glTexCoord2f(0.0, 0.0); glVertex3f(-1.0, -1.0, -1.0);
+		glTexCoord2f(1.0, 0.0); glVertex3f(-1.0, -1.0,  1.0);
+		glTexCoord2f(1.0, 1.0); glVertex3f(-1.0,  1.0,  1.0);
+		glTexCoord2f(0.0, 1.0); glVertex3f(-1.0,  1.0, -1.0);
+		glEnd()
+
+		glDisable(GL_TEXTURE_2D)
 
 def GetColor(color):
 	return color_dict[tuple(color)];

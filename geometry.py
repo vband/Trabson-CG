@@ -56,13 +56,15 @@ class Point(object):
     """A class representing a point or a vector."""
 
     ## Point constructor.
-    def __init__(self, x, y, z = 0.0):
+    def __init__(self, x, y, z = 0.0, textureCoord=None):
         ## X coordinate
         self.x = x
         ## Y coordinate
         self.y = y
         ## Z coordinate
         self.z = z
+
+        self.textureCoord = textureCoord
 
     ## Print object.
     def __repr__(self):
@@ -608,7 +610,7 @@ class Box(object):
 			p1 = Point(p.x,p.y,p.z)
 			p2 = Point(p.x,p.y,p.z)
 			self.bbox += [p1,p2]
-		else:	
+		elif not self.contains(p):
 			self.bbox[0].x = min(p.x,self.bbox[0].x)
 			self.bbox[1].x = max(p.x,self.bbox[1].x)
 			self.bbox[0].y = min(p.y,self.bbox[0].y)
