@@ -159,7 +159,7 @@ def GetSolidFromFile(argv):
 	f.close();
 	return vertices, faces;
 
-def LoadImage(imageName = "Imagens/Velazquez.jpg"):
+def LoadImage(imageName = "Imagens/Minerva.jpg"):
 	"""Load an image file as a 2D texture using PIL"""
 
 	# PIL defines an "open" method which is Image specific!
@@ -515,17 +515,17 @@ def DrawSolid():
 		glTranslatef(0.0,0.0,-6.0);
 		glMultMatrixf(g_Transform);
 
-	# for polygon in solidFaces:
-	# 	glBegin(GL_LINES);
-	# 	glColor3f(1,1,1);
+	for polygon in solidFaces:
+		glBegin(GL_LINES);
+		glColor3f(1,1,1);
 
-	# 	for i in range(len(polygon.points) - 1):
-	# 		glVertex3f(polygon.points[i][0], polygon.points[i][1], polygon.points[i][2]);
-	# 		glVertex3f(polygon.points[i+1][0], polygon.points[i+1][1], polygon.points[i+1][2]);
+		for i in range(len(polygon.points) - 1):
+			glVertex3f(polygon.points[i][0], polygon.points[i][1], polygon.points[i][2]);
+			glVertex3f(polygon.points[i+1][0], polygon.points[i+1][1], polygon.points[i+1][2]);
 
-	# 	glVertex3f(polygon.points[-1][0], polygon.points[-1][1], polygon.points[-1][2]);
-	# 	glVertex3f(polygon.points[0][0], polygon.points[0][1], polygon.points[0][2]);
-	# 	glEnd();
+		glVertex3f(polygon.points[-1][0], polygon.points[-1][1], polygon.points[-1][2]);
+		glVertex3f(polygon.points[0][0], polygon.points[0][1], polygon.points[0][2]);
+		glEnd();
 
 	return
 
